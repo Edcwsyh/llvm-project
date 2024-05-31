@@ -18,6 +18,7 @@
 #include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/CheckerManager.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/SVals.h"
 #include <optional>
 
 using namespace clang;
@@ -76,6 +77,7 @@ void DivZeroChecker::checkPreStmt(const BinaryOperator *B,
       Op != BO_RemAssign)
     return;
 
+  // 右操作数是否是标量类型
   if (!B->getRHS()->getType()->isScalarType())
     return;
 
@@ -84,8 +86,10 @@ void DivZeroChecker::checkPreStmt(const BinaryOperator *B,
 
   // Divide-by-undefined handled in the generic checking for uses of
   // undefined values.
-  if (!DV)
+  if (!DV) {
+    reportBug("Division an unknow value", C.getState(), C);
     return;
+  }
 
   // Check for divide by zero.
   ConstraintManager &CM = C.getConstraintManager();
@@ -98,6 +102,11 @@ void DivZeroChecker::checkPreStmt(const BinaryOperator *B,
     return;
   }
 
+  bool bHasExplicitZeroCheck = false;
+  if(!stateZero) {
+    bHasExplicitZeroCheck = true;
+  }
+
   if ((stateNotZero && stateZero)) {
     std::vector<SymbolRef> taintedSyms = getTaintedSymbols(C.getState(), *DV);
     if (!taintedSyms.empty()) {
@@ -105,6 +114,12 @@ void DivZeroChecker::checkPreStmt(const BinaryOperator *B,
                      taintedSyms);
       return;
     }
+  }
+
+  if(!bHasExplicitZeroCheck)
+  {
+    reportBug("Potential division by zero without explicit check", C.getState(), C);
+    return;
   }
 
   // If we get here, then the denom should not be zero. We abandon the implicit
