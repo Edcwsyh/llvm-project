@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "clang/AST/DeclCXX.h"
 #include "clang/AST/ExprObjC.h"
 #include "clang/AST/ExprOpenMP.h"
 #include "clang/Basic/TargetInfo.h"
@@ -21,7 +22,10 @@
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerHelpers.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/SVals.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/SymExpr.h"
 #include "llvm/Support/raw_ostream.h"
+#include "Iterator.h"
+#include "iostream"
 
 using namespace clang;
 using namespace ento;
@@ -259,33 +263,31 @@ void DereferenceChecker::checkLocation(SVal l, bool isLoad, const Stmt* S,
     return;
   }
 
-  DefinedSVal location = l.castAs<DefinedSVal>();
+  DefinedSVal DSV = l.castAs<DefinedSVal>();
 
   // Check for null dereferences.
-  if (!isa<Loc>(location))
+  if (!isa<Loc>(DSV))
     return;
 
   ProgramStateRef state = C.getState();
 
   ProgramStateRef notNullState, nullState;
-  std::tie(notNullState, nullState) = state->assume(location);
+  std::tie(notNullState, nullState) = state->assume(DSV);
 
   if (nullState || !notNullState) {
+    const Expr *expr = getDereferenceExpr(S);
+    if (suppressReport(C, expr)) {
+        return;
+    }
     if (!notNullState) {
       // We know that 'location' can only be null.  This is what
       // we call an "explicit" null dereference.
-      const Expr *expr = getDereferenceExpr(S);
-      if (!suppressReport(C, expr)) {
-        reportBug(DerefKind::NullPointer, nullState, expr, C);
-        return;
-      }
-    }
-
-    const Expr *expr = getDereferenceExpr(S);
-    if (!suppressReport(C, expr)) {
-      reportBug(DerefKind::MaybeNullPointer, nullState, expr, C);
+      reportBug(DerefKind::NullPointer, nullState, expr, C);
       return;
     }
+
+    reportBug(DerefKind::MaybeNullPointer, nullState, expr, C);
+    return;
 
     // Otherwise, we have the case where the location could either be
     // null or not-null.  Record the error node as an "implicit" null
@@ -320,23 +322,27 @@ void DereferenceChecker::checkBind(SVal L, SVal V, const Stmt *S,
   ProgramStateRef StNonNull, StNull;
   std::tie(StNonNull, StNull) = State->assume(V.castAs<DefinedOrUnknownSVal>());
 
-  if (StNull) {
-    if (!StNonNull) {
-      const Expr *expr = getDereferenceExpr(S, /*IsBind=*/true);
-      if (!suppressReport(C, expr)) {
-        reportBug(DerefKind::NullPointer, StNull, expr, C);
+  if (StNull || !StNonNull) {
+    const Expr *expr = getDereferenceExpr(S, /*IsBind=*/true);
+    if (suppressReport(C, expr)) {
         return;
-      }
     }
+    if (!StNonNull) {
+      reportBug(DerefKind::NullPointer, StNull, expr, C);
+      return;
+    }
+
+    reportBug(DerefKind::MaybeNullPointer, StNull, expr, C);
+    return;
 
     // At this point the value could be either null or non-null.
     // Record this as an "implicit" null dereference.
-    if (ExplodedNode *N = C.generateSink(StNull, C.getPredecessor())) {
-      ImplicitNullDerefEvent event = {V, /*isLoad=*/true, N,
-                                      &C.getBugReporter(),
-                                      /*IsDirectDereference=*/true};
-      dispatchEvent(event);
-    }
+    // if (ExplodedNode *N = C.generateSink(StNull, C.getPredecessor())) {
+    //   ImplicitNullDerefEvent event = {V, /*isLoad=*/true, N,
+    //                                   &C.getBugReporter(),
+    //                                   /*IsDirectDereference=*/true};
+    //   dispatchEvent(event);
+    // }
   }
 
   // Unlike a regular null dereference, initializing a reference with a
