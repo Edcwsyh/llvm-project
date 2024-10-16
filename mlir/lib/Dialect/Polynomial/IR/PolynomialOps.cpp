@@ -15,7 +15,6 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/PatternMatch.h"
-#include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/APInt.h"
 
 using namespace mlir;
@@ -114,16 +113,20 @@ LogicalResult MulScalarOp::verify() {
 /// Test if a value is a primitive nth root of unity modulo cmod.
 bool isPrimitiveNthRootOfUnity(const APInt &root, const APInt &n,
                                const APInt &cmod) {
-  // Root bitwidth may be 1 less then cmod.
-  APInt r = APInt(root).zext(cmod.getBitWidth());
-  assert(r.ule(cmod) && "root must be less than cmod");
-  unsigned upperBound = n.getZExtValue();
+  // The first or subsequent multiplications, may overflow the input bit width,
+  // so scale them up to ensure they do not overflow.
+  unsigned requiredBitWidth =
+      std::max(root.getActiveBits() * 2, cmod.getActiveBits() * 2);
+  APInt r = APInt(root).zextOrTrunc(requiredBitWidth);
+  APInt cmodExt = APInt(cmod).zextOrTrunc(requiredBitWidth);
+  assert(r.ule(cmodExt) && "root must be less than cmod");
+  uint64_t upperBound = n.getZExtValue();
 
   APInt a = r;
   for (size_t k = 1; k < upperBound; k++) {
     if (a.isOne())
       return false;
-    a = (a * r).urem(cmod);
+    a = (a * r).urem(cmodExt);
   }
   return a.isOne();
 }
@@ -286,10 +289,10 @@ void SubOp::getCanonicalizationPatterns(RewritePatternSet &results,
 
 void NTTOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                         MLIRContext *context) {
-  results.add<NTTAfterINTT, NTTOfAdd, NTTOfSub>(context);
+  results.add<NTTAfterINTT>(context);
 }
 
 void INTTOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
-  results.add<INTTAfterNTT, INTTOfAdd, INTTOfSub>(context);
+  results.add<INTTAfterNTT>(context);
 }

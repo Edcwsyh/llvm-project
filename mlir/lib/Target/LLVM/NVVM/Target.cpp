@@ -30,6 +30,7 @@
 #include "llvm/Support/Process.h"
 #include "llvm/Support/Program.h"
 #include "llvm/Support/TargetSelect.h"
+#include "llvm/Support/raw_ostream.h"
 
 #include <cstdlib>
 
@@ -49,7 +50,7 @@ public:
   serializeToObject(Attribute attribute, Operation *module,
                     const gpu::TargetOptions &options) const;
 
-  Attribute createObject(Attribute attribute,
+  Attribute createObject(Attribute attribute, Operation *module,
                          const SmallVector<char, 0> &object,
                          const gpu::TargetOptions &options) const;
 };
@@ -157,7 +158,6 @@ SerializeGPUModuleBase::loadBitcodeFiles(llvm::Module &module) {
   return std::move(bcFiles);
 }
 
-#if LLVM_HAS_NVPTX_TARGET
 namespace {
 class NVPTXSerializer : public SerializeGPUModuleBase {
 public:
@@ -267,9 +267,12 @@ NVPTXSerializer::compileToBinary(const std::string &ptxCode) {
   std::optional<std::string> ptxasCompiler = findTool("ptxas");
   if (!ptxasCompiler)
     return std::nullopt;
-  std::optional<std::string> fatbinaryTool = findTool("fatbinary");
-  if (createFatbin && !fatbinaryTool)
-    return std::nullopt;
+  std::optional<std::string> fatbinaryTool;
+  if (createFatbin) {
+    fatbinaryTool = findTool("fatbinary");
+    if (!fatbinaryTool)
+      return std::nullopt;
+  }
   Location loc = getOperation().getLoc();
 
   // Base name for all temp files: mlir-<module name>-<target triple>-<chip>.
@@ -399,6 +402,26 @@ NVPTXSerializer::compileToBinary(const std::string &ptxCode) {
                                 /*MemoryLimit=*/0,
                                 /*ErrMsg=*/&message))
     return emitLogError("`ptxas`");
+#define DEBUG_TYPE "dump-sass"
+  LLVM_DEBUG({
+    std::optional<std::string> nvdisasm = findTool("nvdisasm");
+    SmallVector<StringRef> nvdisasmArgs(
+        {StringRef("nvdisasm"), StringRef(cubinFile.first)});
+    if (llvm::sys::ExecuteAndWait(nvdisasm.value(), nvdisasmArgs,
+                                  /*Env=*/std::nullopt,
+                                  /*Redirects=*/redirects,
+                                  /*SecondsToWait=*/0,
+                                  /*MemoryLimit=*/0,
+                                  /*ErrMsg=*/&message))
+      return emitLogError("`nvdisasm`");
+    llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> logBuffer =
+        llvm::MemoryBuffer::getFile(logFile->first);
+    if (logBuffer && !(*logBuffer)->getBuffer().empty()) {
+      llvm::dbgs() << "Output:\n" << (*logBuffer)->getBuffer() << "\n";
+      llvm::dbgs().flush();
+    }
+  });
+#undef DEBUG_TYPE
 
   // Invoke `fatbin`.
   message.clear();
@@ -529,6 +552,12 @@ NVPTXSerializer::moduleToObject(llvm::Module &llvmModule) {
   if (targetOptions.getCompilationTarget() == gpu::CompilationTarget::Offload)
     return SerializeGPUModuleBase::moduleToObject(llvmModule);
 
+#if !LLVM_HAS_NVPTX_TARGET
+  getOperation()->emitError(
+      "The `NVPTX` target was not built. Please enable it when building LLVM.");
+  return std::nullopt;
+#endif // LLVM_HAS_NVPTX_TARGET
+
   // Emit PTX code.
   std::optional<llvm::TargetMachine *> targetMachine =
       getOrCreateTargetMachine();
@@ -566,7 +595,6 @@ NVPTXSerializer::moduleToObject(llvm::Module &llvmModule) {
   return compileToBinary(*serializedISA);
 #endif // MLIR_ENABLE_NVPTXCOMPILER
 }
-#endif // LLVM_HAS_NVPTX_TARGET
 
 std::optional<SmallVector<char, 0>>
 NVVMTargetAttrImpl::serializeToObject(Attribute attribute, Operation *module,
@@ -578,19 +606,13 @@ NVVMTargetAttrImpl::serializeToObject(Attribute attribute, Operation *module,
     module->emitError("Module must be a GPU module.");
     return std::nullopt;
   }
-#if LLVM_HAS_NVPTX_TARGET
   NVPTXSerializer serializer(*module, cast<NVVMTargetAttr>(attribute), options);
   serializer.init();
   return serializer.run();
-#else
-  module->emitError(
-      "The `NVPTX` target was not built. Please enable it when building LLVM.");
-  return std::nullopt;
-#endif // LLVM_HAS_NVPTX_TARGET
 }
 
 Attribute
-NVVMTargetAttrImpl::createObject(Attribute attribute,
+NVVMTargetAttrImpl::createObject(Attribute attribute, Operation *module,
                                  const SmallVector<char, 0> &object,
                                  const gpu::TargetOptions &options) const {
   auto target = cast<NVVMTargetAttr>(attribute);
@@ -603,5 +625,5 @@ NVVMTargetAttrImpl::createObject(Attribute attribute,
   return builder.getAttr<gpu::ObjectAttr>(
       attribute, format,
       builder.getStringAttr(StringRef(object.data(), object.size())),
-      objectProps);
+      objectProps, /*kernels=*/nullptr);
 }

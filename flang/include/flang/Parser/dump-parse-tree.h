@@ -201,11 +201,12 @@ public:
   NODE(parser, CommonStmt)
   NODE(CommonStmt, Block)
   NODE(parser, CompilerDirective)
+  NODE(CompilerDirective, AssumeAligned)
   NODE(CompilerDirective, IgnoreTKR)
   NODE(CompilerDirective, LoopCount)
-  NODE(CompilerDirective, AssumeAligned)
   NODE(CompilerDirective, NameValue)
   NODE(CompilerDirective, Unrecognized)
+  NODE(CompilerDirective, VectorAlways)
   NODE(parser, ComplexLiteralConstant)
   NODE(parser, ComplexPart)
   NODE(parser, ComponentArraySpec)
@@ -521,6 +522,8 @@ public:
   NODE(parser, OmpEndSectionsDirective)
   NODE(parser, OmpIfClause)
   NODE_ENUM(OmpIfClause, DirectiveNameModifier)
+  NODE_ENUM(OmpLastprivateClause, LastprivateModifier)
+  NODE(parser, OmpLastprivateClause)
   NODE(parser, OmpLinearClause)
   NODE(OmpLinearClause, WithModifier)
   NODE(OmpLinearClause, WithoutModifier)
@@ -528,9 +531,8 @@ public:
   NODE_ENUM(OmpLinearModifier, Type)
   NODE(parser, OmpLoopDirective)
   NODE(parser, OmpMapClause)
-  NODE(parser, OmpMapType)
-  NODE(OmpMapType, Always)
-  NODE_ENUM(OmpMapType, Type)
+  NODE_ENUM(OmpMapClause, TypeModifier)
+  NODE_ENUM(OmpMapClause, Type)
   static std::string GetNodeName(const llvm::omp::Clause &x) {
     return llvm::Twine(
         "llvm::omp::Clause = ", llvm::omp::getOpenMPClauseName(x))
@@ -874,7 +876,7 @@ protected:
       ss << x;
     }
     if (ss.tell()) {
-      return ss.str();
+      return buf;
     }
     if constexpr (std::is_same_v<T, Name>) {
       return x.source.ToString();

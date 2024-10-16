@@ -524,7 +524,13 @@ public:
     Word("NULL()");
   }
   void Unparse(const LanguageBindingSpec &x) { // R808 & R1528
-    Word("BIND(C"), Walk(", NAME=", x.v), Put(')');
+    Word("BIND(C");
+    Walk(
+        ", NAME=", std::get<std::optional<ScalarDefaultCharConstantExpr>>(x.t));
+    if (std::get<bool>(x.t)) {
+      Word(", CDEFINED");
+    }
+    Put(')');
   }
   void Unparse(const CoarraySpec &x) { // R809
     common::visit(common::visitors{
@@ -1828,6 +1834,9 @@ public:
               Word("!DIR$ ASSUME_ALIGNED ");
               Walk(" ", assumeAligned, ", ");
             },
+            [&](const CompilerDirective::VectorAlways &valways) {
+              Word("!DIR$ VECTOR ALWAYS");
+            },
             [&](const std::list<CompilerDirective::NameValue> &names) {
               Walk("!DIR$ ", names, " ");
             },
@@ -2058,10 +2067,32 @@ public:
                   },
         x.u);
   }
-  void Unparse(const OmpMapType::Always &) { Word("ALWAYS,"); }
-  void Unparse(const OmpMapClause &x) {
-    Walk(std::get<std::optional<OmpMapType>>(x.t), ":");
+  void Unparse(const OmpLastprivateClause &x) {
+    Walk(
+        std::get<std::optional<OmpLastprivateClause::LastprivateModifier>>(x.t),
+        ":");
     Walk(std::get<OmpObjectList>(x.t));
+  }
+  void Unparse(const OmpMapClause &x) {
+    auto &typeMod =
+        std::get<std::optional<std::list<OmpMapClause::TypeModifier>>>(x.t);
+    auto &type = std::get<std::optional<OmpMapClause::Type>>(x.t);
+    Walk(typeMod);
+    if (typeMod.has_value() && type.has_value()) {
+      Put(", ");
+    }
+    Walk(type);
+    if (typeMod.has_value() || type.has_value()) {
+      Put(": ");
+    }
+    Walk(std::get<OmpObjectList>(x.t));
+  }
+  void Unparse(const OmpMapClause::TypeModifier &x) {
+    if (x == OmpMapClause::TypeModifier::OmpxHold) {
+      Word("OMPX_HOLD");
+    } else {
+      Word(OmpMapClause::EnumToString(x));
+    }
   }
   void Unparse(const OmpScheduleModifier &x) {
     Walk(std::get<OmpScheduleModifier::Modifier1>(x.t));
@@ -2198,6 +2229,9 @@ public:
     case llvm::omp::Directive::OMPD_do_simd:
       Word("DO SIMD ");
       break;
+    case llvm::omp::Directive::OMPD_loop:
+      Word("LOOP ");
+      break;
     case llvm::omp::Directive::OMPD_masked_taskloop_simd:
       Word("MASKED TASKLOOP SIMD");
       break;
@@ -2219,11 +2253,17 @@ public:
     case llvm::omp::Directive::OMPD_simd:
       Word("SIMD ");
       break;
+    case llvm::omp::Directive::OMPD_target_loop:
+      Word("TARGET LOOP ");
+      break;
     case llvm::omp::Directive::OMPD_target_parallel_do:
       Word("TARGET PARALLEL DO ");
       break;
     case llvm::omp::Directive::OMPD_target_parallel_do_simd:
       Word("TARGET PARALLEL DO SIMD ");
+      break;
+    case llvm::omp::Directive::OMPD_target_parallel_loop:
+      Word("TARGET PARALLEL LOOP ");
       break;
     case llvm::omp::Directive::OMPD_target_teams_distribute:
       Word("TARGET TEAMS DISTRIBUTE ");
@@ -2236,6 +2276,9 @@ public:
       break;
     case llvm::omp::Directive::OMPD_target_teams_distribute_simd:
       Word("TARGET TEAMS DISTRIBUTE SIMD ");
+      break;
+    case llvm::omp::Directive::OMPD_target_teams_loop:
+      Word("TARGET TEAMS LOOP ");
       break;
     case llvm::omp::Directive::OMPD_target_simd:
       Word("TARGET SIMD ");
@@ -2743,10 +2786,11 @@ public:
   WALK_NESTED_ENUM(OmpDefaultClause, Type) // OMP DEFAULT
   WALK_NESTED_ENUM(OmpDefaultmapClause, ImplicitBehavior) // OMP DEFAULTMAP
   WALK_NESTED_ENUM(OmpDefaultmapClause, VariableCategory) // OMP DEFAULTMAP
+  WALK_NESTED_ENUM(
+      OmpLastprivateClause, LastprivateModifier) // OMP lastprivate-modifier
   WALK_NESTED_ENUM(OmpScheduleModifierType, ModType) // OMP schedule-modifier
   WALK_NESTED_ENUM(OmpLinearModifier, Type) // OMP linear-modifier
   WALK_NESTED_ENUM(OmpDependenceType, Type) // OMP dependence-type
-  WALK_NESTED_ENUM(OmpMapType, Type) // OMP map-type
   WALK_NESTED_ENUM(OmpScheduleClause, ScheduleType) // OMP schedule-type
   WALK_NESTED_ENUM(OmpDeviceClause, DeviceModifier) // OMP device modifier
   WALK_NESTED_ENUM(OmpDeviceTypeClause, Type) // OMP DEVICE_TYPE
@@ -2756,6 +2800,7 @@ public:
   WALK_NESTED_ENUM(OmpCancelType, Type) // OMP cancel-type
   WALK_NESTED_ENUM(OmpOrderClause, Type) // OMP order-type
   WALK_NESTED_ENUM(OmpOrderModifier, Kind) // OMP order-modifier
+  WALK_NESTED_ENUM(OmpMapClause, Type) // OMP map-type
 #undef WALK_NESTED_ENUM
   void Unparse(const ReductionOperator::Operator x) {
     switch (x) {
