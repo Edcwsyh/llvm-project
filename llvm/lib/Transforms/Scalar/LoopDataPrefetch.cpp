@@ -391,7 +391,7 @@ bool LoopDataPrefetch::runOnLoop(Loop *L) {
       continue;
 
     BasicBlock *BB = P.InsertPt->getParent();
-    SCEVExpander SCEVE(*SE, BB->getModule()->getDataLayout(), "prefaddr");
+    SCEVExpander SCEVE(*SE, BB->getDataLayout(), "prefaddr");
     const SCEV *NextLSCEV = SE->getAddExpr(P.LSCEVAddRec, SE->getMulExpr(
       SE->getConstant(P.LSCEVAddRec->getType(), ItersAhead),
       P.LSCEVAddRec->getStepRecurrence(*SE)));
@@ -405,7 +405,7 @@ bool LoopDataPrefetch::runOnLoop(Loop *L) {
     IRBuilder<> Builder(P.InsertPt);
     Module *M = BB->getParent()->getParent();
     Type *I32 = Type::getInt32Ty(BB->getContext());
-    Function *PrefetchFunc = Intrinsic::getDeclaration(
+    Function *PrefetchFunc = Intrinsic::getOrInsertDeclaration(
         M, Intrinsic::prefetch, PrefPtrValue->getType());
     Builder.CreateCall(
         PrefetchFunc,

@@ -47,7 +47,7 @@ from ..support import seven
 
 def is_exe(fpath):
     """Returns true if fpath is an executable."""
-    if fpath == None:
+    if fpath is None:
         return False
     if sys.platform == "win32":
         if not fpath.endswith(".exe"):
@@ -266,6 +266,9 @@ def parseOptionsAndInitTestdirs():
                     configuration.compiler = candidate
                     break
 
+    if args.make:
+        configuration.make_path = args.make
+
     if args.dsymutil:
         configuration.dsymutil = args.dsymutil
     elif platform_system == "Darwin":
@@ -273,6 +276,7 @@ def parseOptionsAndInitTestdirs():
             "xcrun -find -toolchain default dsymutil"
         )
     if args.llvm_tools_dir:
+        configuration.llvm_tools_dir = args.llvm_tools_dir
         configuration.filecheck = shutil.which("FileCheck", path=args.llvm_tools_dir)
         configuration.yaml2obj = shutil.which("yaml2obj", path=args.llvm_tools_dir)
 

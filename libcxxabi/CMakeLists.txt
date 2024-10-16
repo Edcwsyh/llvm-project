@@ -131,11 +131,6 @@ if (NOT LIBCXXABI_ENABLE_SHARED AND NOT LIBCXXABI_ENABLE_STATIC)
   message(FATAL_ERROR "libc++abi must be built as either a shared or static library.")
 endif()
 
-# TODO: Remove this, which shouldn't be necessary since we know we're being built
-#       side-by-side with libc++.
-set(LIBCXXABI_LIBCXX_INCLUDES "" CACHE PATH
-    "Specify path to libc++ includes.")
-
 set(LIBCXXABI_HERMETIC_STATIC_LIBRARY_DEFAULT OFF)
 if (WIN32)
   set(LIBCXXABI_HERMETIC_STATIC_LIBRARY_DEFAULT ON)
@@ -244,7 +239,6 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "AIX")
   add_flags_if_supported("-mdefault-visibility-export-mapping=explicit")
   set(CMAKE_AIX_EXPORT_ALL_SYMBOLS OFF)
 endif()
-add_compile_flags("${LIBCXXABI_ADDITIONAL_COMPILE_FLAGS}")
 add_library_flags("${LIBCXXABI_ADDITIONAL_LIBRARIES}")
 
 # Configure compiler. Must happen after setting the target flags.
