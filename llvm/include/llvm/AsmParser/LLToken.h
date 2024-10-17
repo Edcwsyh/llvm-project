@@ -114,6 +114,7 @@ enum Kind {
   kw_disjoint,
   kw_inbounds,
   kw_nneg,
+  kw_samesign,
   kw_inrange,
   kw_addrspace,
   kw_section,
@@ -147,6 +148,7 @@ enum Kind {
   kw_aarch64_vector_pcs,
   kw_aarch64_sve_vector_pcs,
   kw_aarch64_sme_preservemost_from_x0,
+  kw_aarch64_sme_preservemost_from_x1,
   kw_aarch64_sme_preservemost_from_x2,
   kw_msp430_intrcc,
   kw_avr_intrcc,
@@ -267,6 +269,8 @@ enum Kind {
   kw_fmin,
   kw_uinc_wrap,
   kw_udec_wrap,
+  kw_usub_cond,
+  kw_usub_sat,
 
   // Instruction Opcodes (Opcode in UIntVal).
   kw_fneg,

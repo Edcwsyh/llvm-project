@@ -36,6 +36,7 @@
 #include "llvm/IR/InstIterator.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/Module.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
 #include "llvm/Transforms/Utils/GuardUtils.h"
@@ -68,7 +69,7 @@ static bool explicifyGuards(Function &F) {
   if (GuardIntrinsics.empty())
     return false;
 
-  auto *DeoptIntrinsic = Intrinsic::getDeclaration(
+  auto *DeoptIntrinsic = Intrinsic::getOrInsertDeclaration(
       F.getParent(), Intrinsic::experimental_deoptimize, {F.getReturnType()});
   DeoptIntrinsic->setCallingConv(GuardDecl->getCallingConv());
 
