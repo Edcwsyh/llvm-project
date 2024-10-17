@@ -87,7 +87,6 @@ void DivZeroChecker::checkPreStmt(const BinaryOperator *B,
   // Divide-by-undefined handled in the generic checking for uses of
   // undefined values.
   if (!DV) {
-    reportBug("Division an unknow value", C.getState(), C);
     return;
   }
 
