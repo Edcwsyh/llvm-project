@@ -13,7 +13,6 @@
 
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/ExprObjC.h"
-#include "clang/AST/ExprOpenMP.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
@@ -24,8 +23,6 @@
 #include "clang/StaticAnalyzer/Core/PathSensitive/SVals.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/SymExpr.h"
 #include "llvm/Support/raw_ostream.h"
-#include "Iterator.h"
-#include "iostream"
 
 using namespace clang;
 using namespace ento;
@@ -36,8 +33,7 @@ class DereferenceChecker
                       check::Bind,
                       EventDispatcher<ImplicitNullDerefEvent> > {
 
-  enum DerefKind { NullPointer, UndefinedPointerValue, MaybeNullPointer };
-  enum DerefKind { NullPointer, UndefinedPointerValue, AddressOfLabel };
+  enum DerefKind { NullPointer, UndefinedPointerValue, AddressOfLabel, MaybeNullPointer  };
 
   BugType BT_Null{this, "Dereference of null pointer", categories::LogicError};
   BugType BT_Undef{this, "Dereference of undefined pointer value",
